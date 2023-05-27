@@ -1,3 +1,17 @@
+/**
+ * This routine is for generating a text file of pseudo experiments, returned as events in the bins.
+ * The format of each text line is:
+ * [ID] [N bins] [values in N bins] [Ue4 for generation] [Um4 for generation] [dm41 for generation]
+ * 
+ *  1. loads the central value spectrum
+ *  2. adjusts the osc parameters
+ *  3. runs generator and dumps info into text file
+ *
+ * Version notes:
+ * 2022/09/04 - tmw - modifed from DL3plus1_FCwregen.cc -- it's a single point generation without the fitting!
+ *
+ **/
+
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -33,9 +47,6 @@ const int nBins = nBins_e+nBins_mu;
 // output is a txt file with two lines for each universe
 
 int main(int argc, char* argv[]){
-
-  // set the input parameter
-  int specific_entry = atoi(argv[1]);
 
   // --------------------------------------------------
   // initiate other parameters
@@ -102,28 +113,7 @@ int main(int argc, char* argv[]){
   SBNllminimizer minimizer( xml );
   std::cout<<"Initialized minimizer"<<std::endl;
 
-  // make array to  get the parameter ids and match to the entry we want
-  std::vector<std::vector<float>> params_v;
-  for(int mi_base = 0; mi_base <dm2_grdpts; mi_base++){
-    for(int uei_base = 0; uei_base < ue4_grdpts; uei_base++){
-      for(int umui_base = 0; umui_base < umu4_grdpts; umui_base++){
-      	std::vector<float> params {mi_base, uei_base, umui_base};
-      	params_v.push_back(params);
-      }
-    }
-  }
-  // now get the parameters we are testing
-  // specific_entry=0;
-  int mi_base = params_v[specific_entry][0];
-  int uei_base = params_v[specific_entry][1];
-  int umui_base = params_v[specific_entry][2];
-
-  // open output files
-  std::ofstream chifile;
-  std::string textid = ZeroPadNumber(specific_entry, 5);
-  chifile.open("chis_seek_"+textid+".txt", std::ios_base::app);
-
-
+  
   // load in saved cvSpec - change to your location
   SBNspec cvSpec("/cluster/tufts/wongjiradlabnu/kmason03/whipping_star/data/MassSpectraBigBins/"+tag+"_Bkg.SBNspec.root",xml);
   // Load up the necesary bits and store them in vectors on the stack **
@@ -141,17 +131,11 @@ int main(int argc, char* argv[]){
   TMatrixD * cvFracSys_collapsed =(TMatrixD*)fsys->Get("frac_covariance");
   int a = cvChi.FillCollapsedFractionalMatrix(cvFracSys_collapsed);
 
-  // there were 400 mass spectra pregenerated in the original version
-  //  - this makes sure the grid points line up
-  int mi_base_new = mi_base*(400/dm2_grdpts);
-  //mnu =m41, ue4 = sqrt(.5sin^2(2theta14)), um4 = sqrt(.5sin^2(2theta24)), sin2 term = 4(ue4**2)(um4**2
-  float ue_base = pow(10.,(uei_base/float(ue4_grdpts)*TMath::Log10(ue4_hibound/ue4_lowbound) + TMath::Log10(ue4_lowbound)));
-  float um_base = pow(10.,(umui_base/float(umu4_grdpts)*TMath::Log10(umu4_hibound/umu4_lowbound) + TMath::Log10(umu4_lowbound)));
-  //float mnu_base = pow(10.,((mi_base_new+.5)/float(400)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) + TMath::Log10(sqrt(dm2_lowbound))));
-  float mnu_base = float(mi_base)/float(dm2_grdpts)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) + TMath::Log10(sqrt(dm2_lowbound));
-  if ( dm2_grdpts>1 ) {
-    mnu_base += offset_logdm;
-  }
+  // set the oscillation parameters we want to generate psuedo-experiments from
+  float ue_base = 0.0; // no nue disappear or appearance
+  float um_base = 0.0; // no numu disappearance
+  float mnu_base = TMath::Log10(sqrt(dm2_lowbound)); // doesn't matter if no mixing
+  // convert back to from log scale to dm
   mnu_base = pow( 10., mnu_base );
   
   // calculate scaling factors (sin^2(2theta) value)
@@ -196,96 +180,30 @@ int main(int argc, char* argv[]){
   TrueChi.pseudo_from_collapsed = true;
   TrueChi.GeneratePseudoExperiment();
 
+  std::ofstream outfile("pseudo_experiments.csv",std::ofstream::out);
+
   // Across several fake experiments for this grid point:
   for(int expi = 0; expi < nFakeExp; expi++){
     std::cout<<"EXPERIMENT NUMBER: "<<expi<<std::endl;
     std::vector<float> fakeData = TrueChi.GeneratePseudoExperiment();
 
-    // option to hardcode fakedata spectrum for testing
-    if(false){
-      fakeData=SetFakeData(fakeData);
-    }
+    // start of line
 
-    // get the -2llh at the throw point (pt)
-    TMatrixD cov_pt =GetTotalCov(fakeData, oscSpec, *oscFracSys_collapsed);
-    float ptfit =GetLLHFromVector(fakeData, oscSpec, cov_pt, false);
-
-    // option to run traditional grid search
-    float chi_min_grid =1000000;
-    if(false){
-      float e_app_in = 4*pow(ue_base,2)*pow(um_base,2);
-      float e_dis_in = 4*pow(ue_base,2)*(1-pow(ue_base,2));
-      float m_dis_in = 4*pow(um_base,2)*(1-pow(um_base,2));
-      int numgridpts =25;
-
-      // loop over all the grid points
-      for(int mi_in = 0; mi_in <numgridpts; mi_in++){
-        std::cout<<mi_in<<std::endl;
-        for(int uei_in = 0; uei_in < numgridpts; uei_in++){
-          for(int umui_in = 0; umui_in < numgridpts; umui_in++){
-            int mi_in_new = mi_in*(400/numgridpts);
-            float ue_val = pow(10.,(uei_in/float(numgridpts)*TMath::Log10(ue4_hibound/ue4_lowbound) + TMath::Log10(ue4_lowbound)));
-            float um_val = pow(10.,(umui_in/float(numgridpts)*TMath::Log10(umu4_hibound/umu4_lowbound) + TMath::Log10(umu4_lowbound)));
-            //float mnu_val = pow(10.,((mi_in+.5)/float(400)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) + TMath::Log10(sqrt(dm2_lowbound))));
-	    float mnu_val = float(mi_in)/float(numgridpts)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) + TMath::Log10(sqrt(dm2_lowbound));
-	    mnu_val += offset_logdm;
-	    mnu_val = pow(10.,mnu_val);
-
-            // get the oscillated spectra and covariance matrix
-            SBNspec inSpec =  minimizer.getOscSpectra( mnu_val, ue_val, um_val );
-            // inSpec.PrintCollapsedVector();
-            inSpec.RemoveMCError();
-            SBNchi innerChi(inSpec, *covFracSys);
-            TMatrixD * inFracSys_collapsed =(TMatrixD*)fsys->Get("frac_covariance");
-            int c = innerChi.FillCollapsedFractionalMatrix(inFracSys_collapsed);
-            TMatrixD cov_grid = GetTotalCov(fakeData, inSpec, *inFracSys_collapsed);
-            float chi_test = GetLLHFromVector(fakeData, inSpec, cov_grid, false);
-            delete inFracSys_collapsed;
-
-            if (chi_test<chi_min_grid){
-              chi_min_grid = chi_test;
-            }
-          }
-        }
-      }
-    }// end of if to run traditional grid search
-    
-    // now run the minimizer
-    double bestfit = minimizer.doFit( fakeData, mnu_base, ue_base, um_base )[0];
-    // double bestfit = 0;
-
-
-    // trying a variety of starts
-    double min_minimizer =100000000;
-    std::vector<float> beststart;
-    if(true){
-      std::cout<<"starting loop"<<std::endl;
-      double temp;
-      // std::vector<float> m_v={0.01,2,8};
-      // std::vector<float> u_v={0.01,0.08,0.4};
-      for(int x=0;x<5;x++){
-            int startval = 5*x;
-            int numgridpts=25;
-            float ue_val = pow(10.,(startval/float(numgridpts)*TMath::Log10(ue4_hibound/ue4_lowbound) + TMath::Log10(ue4_lowbound)));
-            float um_val = pow(10.,(startval/float(numgridpts)*TMath::Log10(umu4_hibound/umu4_lowbound) + TMath::Log10(umu4_lowbound)));
-            float mnu_val = pow(10.,((startval*(500/float(numgridpts))+.5)/float(400)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) + TMath::Log10(sqrt(dm2_lowbound))));
-
-            temp = minimizer.doFit( fakeData, mnu_val,ue_val,um_val)[0];
-            if (temp < min_minimizer){
-              min_minimizer=temp;
-              // beststart={m_v[x],u_v[y],u_v[z]};
-          //   }
-          // }
-        }
-      } //end of loop over start points
-    }
-
-    chifile<<ptfit<<std::endl;
-    // chifile<<bestfit<<std::endl;
-    chifile<<min_minimizer<<std::endl;
-    // chifile<<chi_min_grid<<std::endl;
+    // pseudo-experiment ID, number of bins,
+    outfile << expi  << "," << fakeData.size() << ",";
+    // the bin values
+    for ( auto const binval : fakeData )
+      outfile << binval << ",";
+    // osc generating points
+    outfile << "Ue4:" << ue_base << ",Um4:" << um_base << ",dm:" << mnu_base << std::endl;
+      
+      
   } //end of fake experiment loop
+
+  outfile.close();
+  
   return 0;
+  
 } // end of main function
 
 TMatrixD GetTotalCov(const std::vector<float>& obsSpec, const SBNspec& expSpec, const TMatrixD& Mfracsys){

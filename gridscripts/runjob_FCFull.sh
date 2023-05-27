@@ -28,7 +28,13 @@ pwd
 # this assumes you already made your cxx code
 cp ${WORK_DIR}/DL3plus1_FCwregen .
 let startid="$arrayid+0*1900"
-# run your command
+# runyour command
+
+# make log directory
+mkdir -p ${WORK_DIR}/logs
+
+# make Results folder
+mkdir -p ${WORK_DIR}/FCresults
 
 ./DL3plus1_FCwregen ${startid}  > ${WORK_DIR}/logs/${arrayid}_log.txt
 mv chis*txt ${WORK_DIR}/FCresults/.

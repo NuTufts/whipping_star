@@ -30,8 +30,8 @@ std::ofstream binsfile;
 std::ofstream sensfile;
 // set grid points and parameter limits to search for grid search
 // dm2 = delta m^2_41 (ev^2)
-const int dm2_grdpts(5), ue4_grdpts(5), umu4_grdpts(5);
-const double dm2_lowbound(0.01), dm2_hibound(100);
+const int dm2_grdpts(1), ue4_grdpts(5), umu4_grdpts(5);
+const double dm2_lowbound(1.89), dm2_hibound(1.89);
 const double ue4_lowbound(0.01), ue4_hibound(0.5);
 const double umu4_lowbound(0.01), umu4_hibound(0.5);
 
@@ -128,7 +128,7 @@ int main(){
           std::vector<float> fakeData = TrueChi.GeneratePseudoExperiment();
 
           // get the -2llh at the throw point (pt)
-      		TMatrixD cov_pt = GetTotalCov(fakeData, oscSpec, *oscFracSys_collapsed);
+	  TMatrixD cov_pt = GetTotalCov(fakeData, oscSpec, *oscFracSys_collapsed);
           float ptfit = GetLLHFromVector(fakeData, oscSpec, cov_pt, false);
 
           // now run the minimizer
@@ -137,7 +137,9 @@ int main(){
           // and save the outputs
           // output is a txt file with R, -2LLH bf, -2LLH pt, bf delta m^2, bf Ue, bf Umu
           chifile<<(ptfit-bestfit[0])<<" "<<bestfit[0]<<" "<<ptfit<<" ";
-          chifile<<bestfit[1]<<" "<<bestfit[2]<<" "<<bestfit[3]<<std::endl;
+          chifile<<bestfit[1]<<" "<<bestfit[2]<<" "<<bestfit[3]<<" "
+		 <<ue_base<<" "<<um_base<<" "<<mnu_base
+		 <<std::endl;
 
         } //end of fake experiment loop
       } //end of loop over Umu

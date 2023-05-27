@@ -170,9 +170,9 @@ namespace sbn {
     ROOT::Math::Functor f(&SBNllminimizer::negative_likelihood_ratio,3);
     min->SetFunction(f);
 
-    const float dm2_lowbound(0.01), dm2_hibound(100);
-    const float ue4_lowbound(0.01),  ue4_hibound(0.5);
-    const float umu4_lowbound(0.01), umu4_hibound(0.5);
+    const float dm2_lowbound(0.001), dm2_hibound(100);
+    const float ue4_lowbound(0.0),  ue4_hibound(0.5);
+    const float umu4_lowbound(0.0), umu4_hibound(0.5);
     float logdm2_low  = log(dm2_lowbound);
     float logdm2_high = log(dm2_hibound);
 
