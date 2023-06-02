@@ -16,6 +16,8 @@ namespace sbn {
       nBins_e(12), // this needs to be not hard-coded
       nBins_mu(19),
       nBins(31),
+      use_polar_coords(true),
+      algoName("Simplex"), //Migrad, Seek
       covFracSys(NULL)
   {
 
@@ -77,6 +79,19 @@ namespace sbn {
       delete _chi;
   }
 
+  void SBNllminimizer::UtoPolar( const float Ue4, const float Um4, float& r, float& phi )
+  {
+    r = TMath::Sqrt(Ue4*Ue4 + Um4*Um4);
+    phi = TMath::ATan2( Um4, Ue4 );
+  }
+
+  void SBNllminimizer::PolarToU( const float r, const float phi, float& Ue4, float& Um4 )
+  {
+    Ue4 = r*TMath::Cos(phi);
+    Um4 = r*TMath::Sin(phi);
+  }
+  
+  // static function
   double SBNllminimizer::negative_likelihood_ratio( const double* par )
   {
     //std::cout << _active_copy << std::endl;
@@ -84,8 +99,14 @@ namespace sbn {
     // function to calculate the chi2 between fake universe and the mc events with osc weights
     float logdm2 = par[0];
     float dm     = sqrt( exp(logdm2) ); // gross
+
     float Ue4    = par[1];
     float Um4    = par[2];
+    if ( _active_copy->use_polar_coords ) {
+      // convert from polar coordinates
+      SBNllminimizer::PolarToU( par[1], par[2], Ue4, Um4 );
+    }
+    
     float e_app  = 4*pow(Ue4,2)*pow(Um4,2);     // sin^2(2theta_mue)
     float e_dis  = 4*pow(Ue4,2)*(1-pow(Ue4,2)); // sin^2(2theta_ee)
     float m_dis  = 4*pow(Um4,2)*(1-pow(Um4,2)); // sin^2(2theta_mumu)
@@ -158,7 +179,6 @@ namespace sbn {
   std::vector<double> SBNllminimizer::doFit( std::vector<float>& obs_bins, float dm_start,float ue_start, float um_start )
   {
     std::string minName =  "Minuit";
-    std::string algoName = "Simplex"; //Migrad, Seek
 
     _active_copy = this;
     _active_copy->setObservedBinValues( obs_bins ); // we need a number of bins check
@@ -170,38 +190,68 @@ namespace sbn {
     ROOT::Math::Functor f(&SBNllminimizer::negative_likelihood_ratio,3);
     min->SetFunction(f);
 
-    const float dm2_lowbound(0.001), dm2_hibound(100);
-    const float ue4_lowbound(0.0),  ue4_hibound(0.5);
-    const float umu4_lowbound(0.0), umu4_hibound(0.5);
+    const float dm2_lowbound(1.0e-3), dm2_hibound(1e3);
+    const float ue4_lowbound(0.0),  ue4_hibound(0.70710678118);
+    const float umu4_lowbound(0.0), umu4_hibound(0.70710678118);
     float logdm2_low  = log(dm2_lowbound);
     float logdm2_high = log(dm2_hibound);
 
     // min->SetVariable( 0, "log(dm^2)", (dm_start), 1 );
-    min->SetVariable( 0, "log(dm^2)", log(dm_start*dm_start), 0.1 );
-
-    min->SetVariable( 1, "Ue4", ue_start, 0.1 );
-    min->SetVariable( 2, "Um4", um_start, 0.1 );
+    std::cout << "Initial log_dm2 step: " << fabs(logdm2_high-logdm2_low)/3.0 << std::endl;
+    min->SetVariable( 0, "log(dm^2)", log(dm_start*dm_start), fabs(logdm2_high-logdm2_low)/3.0 );
     min->SetVariableLimits( 0, logdm2_low, logdm2_high );
-    min->SetVariableLimits( 1, ue4_lowbound, ue4_hibound );
-    min->SetVariableLimits( 2, umu4_lowbound, umu4_hibound );
+    
+    if ( !use_polar_coords ) {
+      // standard Ue4 and Um4 space
+      min->SetVariable( 1, "Ue4", ue_start, 0.1 );
+      min->SetVariable( 2, "Um4", um_start, 0.1 );
+      min->SetVariableLimits( 1, ue4_lowbound, ue4_hibound );
+      min->SetVariableLimits( 2, umu4_lowbound, umu4_hibound );
+    }
+    else {
+      // polar (Ue4,Um4) space to help enforce bounds: |Ue4|^2+|Um4|^2<=1/2
+      float rstart = TMath::Sqrt(ue_start*ue_start+um_start*um_start);
+      float phistart = atan2(um_start,ue_start);
+      min->SetVariable( 1, "r", rstart, 0.1 );
+      min->SetVariable( 2, "phi", phistart, 0.1 );
+      min->SetVariableLimits( 1, 0, TMath::Sqrt(0.5) );
+      min->SetVariableLimits( 2, 0, 1.57079632679 ); // 0 to pi/2
+    }
 
     min->SetMaxFunctionCalls(1000); // for Minuit/Minuit2
     min->SetMaxIterations(1000);  // for GSL
-    min->SetTolerance(0.1);
+    min->SetTolerance(0.01);
     min->SetPrintLevel(1);
 
     _active_copy->_niters = 0;
     min->Minimize();
     const double* results = min->X();
-    // std::cout << "RESULTS:" << std::endl;
-    // std::cout << "  dm^2 = " << exp(results[0]) << " eV^2" << std::endl;
-    // std::cout << "  dm   = " << sqrt(exp(results[0])) << " eV" << std::endl;
-    // std::cout << "  Ue4 = "  << results[1] << std::endl;
-    // std::cout << "  Um4 = "  << results[2] << std::endl;
-    std::cout<<"test min "<< min->MinValue()<<std::endl;
-    std::vector<double> bestfit{min->MinValue(),exp(results[0]),results[1],results[2]};
+    std::vector<double> bestfit(4,0.0);
+    bestfit[0] = min->MinValue(); // chi2
+    bestfit[1] = exp(results[0]); // dm^2
+    if ( !use_polar_coords ) {
+      bestfit[2] = results[1];
+      bestfit[3] = results[2];
+    }
+    else {
+      float ue4min = 0.;
+      float um4min = 0.;
+      SBNllminimizer::PolarToU( results[1], results[2], ue4min, um4min );
+      bestfit[2] = ue4min;
+      bestfit[3] = um4min;
+    }
+
+    std::cout << "MINIMIZER RESULTS:" << std::endl;
+    std::cout << "  Chi^2 = " << bestfit[0] << std::endl;
+    std::cout << "  dm^2 = " << bestfit[1] << " eV^2" << std::endl;
+    std::cout << "  dm   = " << sqrt(bestfit[1]) << " eV" << std::endl;
+    std::cout << "  Ue4 = "  << bestfit[2] << std::endl;
+    std::cout << "  Um4 = "  << bestfit[3] << std::endl;
+    
+    // destroy minimizer
     delete min;
-    // delete results;
+    
+    /// return the results
     return bestfit;
   }
 

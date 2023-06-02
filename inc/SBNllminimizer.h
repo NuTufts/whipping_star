@@ -28,6 +28,8 @@ namespace sbn {
     int nBins_e; // want to not hard code this info
     int nBins_mu; // want to not hard code this info
     int nBins; // want to not hard code this info
+    bool use_polar_coords; // fit in polar form for U: r=|Ue4|^2+|Um4|^2 and phi=atan2(|U_e4|,|Um4|)
+    std::string algoName; // options: simplex, migrad, seek
 
     static double negative_likelihood_ratio( const double* par );
     std::vector<double> doFit( std::vector<float>& obs_bins, float dm_start,float ue_start, float um_start );
@@ -42,6 +44,8 @@ namespace sbn {
 				  const SBNspec& expSpec,
 				  const TMatrixD& Msys,
 				  bool prints);
+    static void UtoPolar( const float Ue4, const float Um4, float& r, float& phi );
+    static void PolarToU( const float r, const float phi, float& Ue4, float& Um4 );
 
     std::vector<float> _observed_bins;
     void setObservedBinValues( std::vector<float>& obs ) { _observed_bins = obs; };
