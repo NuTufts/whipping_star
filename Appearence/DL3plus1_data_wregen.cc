@@ -40,6 +40,8 @@
 #include "assert.h"
 #include "SBNllminimizer.h"
 
+#include "GridDefinition.h"
+
 #define no_argument 0
 #define required_argument 1
 #define optional_argument 2
@@ -48,7 +50,7 @@ using namespace sbn;
 using namespace std::chrono;
 
 // define helper functions
-void printbinedges();
+void printbinedges( const GridDefinition& griddef );
 TMatrixD GetTotalCov(const std::vector<float>& obsSpec,const SBNspec& expSpec,const TMatrixD& Mfracsys);
 float GetLLHFromVector(const std::vector<float>& obsSpec, const SBNspec& expSpec,const TMatrixD& Msys,bool prints);
 void testfcn(Int_t &npar, Double_t *gin, Double_t &f, Double_t *par, Int_t iflag);
@@ -148,18 +150,21 @@ int main(int argc, char* argv[]){
     std::cout << "//////////////////////////////////////////" << std::endl;    
   }
 
+  GridDefinition griddef;
+  griddef.define_maya_grid();
+  
   // open output text files
   coordfile.open("bins_data.txt", std::ios_base::app);
   chifile.open("chis_data.txt", std::ios_base::app);
   specfile.open("spec_data.txt", std::ios_base::app);
   gridptfile.open("gridpts_data.txt", std::ios_base::app);
-  if(printbins) printbinedges();
+  if(printbins) printbinedges( griddef );
 
   // stop after printing bin edges
-  // if (true) {
-  //   coordfile.close();    
-  //   return 0;
-  // }
+  if (true) {
+    coordfile.close();    
+    return 0;
+  }
   
   // Load up the necesary bits and store them in vectors on the stack **
   cvSpec.Scale("fullosc",0.0);
@@ -544,24 +549,29 @@ int main(int argc, char* argv[]){
 //----------------------HELPER FUNCTIONS---------------------------------------
 //----------------------------------------------------------------------------
 
-void printbinedges(){
+void printbinedges( const GridDefinition& griddef ){
   // funtion that prints the bins  to the output textfile
   for(int mi = 0; mi < dm2_grdpts; mi++){
     //mnu = pow(10.,((mi+.5)/float(dm2_grdpts)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) + TMath::Log10(sqrt(dm2_lowbound))));
     //mnu = pow(10.,((mi+.5)/float(dm2_grdpts)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) ));
-    mnu = pow(10.,((mi)/float(dm2_grdpts)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) + TMath::Log10(sqrt(dm2_lowbound))));
+    
+    //mnu = pow(10.,((mi)/float(dm2_grdpts)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) + TMath::Log10(sqrt(dm2_lowbound))));
+    mnu = sqrt( griddef.dm2_bin_v.at(mi) );
+
     coordfile << pow(mnu,2) << " ";
   }
   coordfile << std::endl;
   
   for(int uei = 0; uei < ue4_grdpts; uei++){
-    ue = pow(10.,(uei/float(ue4_grdpts)*TMath::Log10(ue4_hibound/ue4_lowbound) + TMath::Log10(ue4_lowbound)));
+    //ue = pow(10.,(uei/float(ue4_grdpts)*TMath::Log10(ue4_hibound/ue4_lowbound) + TMath::Log10(ue4_lowbound)));
+    ue = griddef.Ue4_bin_v.at(uei);
     coordfile << ue << " ";
   }
   coordfile << std::endl;
   
   for(int umui = 0; umui < umu4_grdpts; umui++){
-    umu = pow(10.,(umui/float(umu4_grdpts)*TMath::Log10(umu4_hibound/umu4_lowbound) + TMath::Log10(umu4_lowbound)));
+    //umu = pow(10.,(umui/float(umu4_grdpts)*TMath::Log10(umu4_hibound/umu4_lowbound) + TMath::Log10(umu4_lowbound)));
+    umu = griddef.Umu4_bin_v.at(umui);
     coordfile << umu << " ";
   }
   coordfile << std::endl;

@@ -31,6 +31,10 @@ class GridDefinition {
     Ue4_bin_v.clear();
     Umu4_bin_v.clear();
   };
+
+  int binindex_to_kindex( int mi, int uei, int umui ) {
+    return mi*ue4_grdpts*umu4_grdpts + uei*umu4_grdpts + umui;
+  };
   
   void define_maya_grid() {
 

@@ -9,13 +9,18 @@
 #include <cstring>
 #include <ctime>
 #include <chrono>
+#include <algorithm>
+
 // #include <gperftools/profiler.h>
 
 #include "TFile.h"
 #include "SBNllminimizer.h"
 #include "prob.h"
 
+#include "GridDefinition.h"
+
 using namespace sbn;
+using namespace std::chrono;
 
 // define helper functions
 TMatrixD GetTotalCov(const std::vector<float>& obsSpec,const SBNspec& expSpec,const TMatrixD& Mfracsys);
@@ -37,6 +42,12 @@ int main(int argc, char* argv[]){
   // set the input parameter
   int specific_entry = atoi(argv[1]);
 
+  bool DO_SIMPLEX_SEARCH = true;
+  const int NTOP_GRID_TO_FIT = 3;
+
+  // Number of universes!
+  const int nFakeExp(1000);
+
   // --------------------------------------------------
   // initiate other parameters
   // hardcoded - change to your version of the xml
@@ -47,31 +58,37 @@ int main(int argc, char* argv[]){
   const int nBins = nBins_e+nBins_mu;
 
   // set grid points: uboone best fit
-  // const double dm2_data_bestfit = 3.69939;
-  // const double ue4_data_bestfit = 0.5;
-  // const double um4_data_bestfit = 0.01;
+  const double dm2_data_bestfit = 3.69939;
+  const double ue4_data_bestfit = 0.5;
+  const double um4_data_bestfit = 0.01;
 
   // global best fit
-  const double dm2_data_bestfit = 1.32;
-  const double ue4_data_bestfit = 0.116;
-  const double um4_data_bestfit = 0.135;
-  
+  // const double dm2_data_bestfit = 1.32;
+  // const double ue4_data_bestfit = 0.116;
+  // const double um4_data_bestfit = 0.135;
+
+  GridDefinition griddef;
+  griddef.define_maya_grid();       
   
   //const int dm2_grdpts(25), ue4_grdpts(25), umu4_grdpts(25);
   //const int dm2_grdpts(1), ue4_grdpts(25), umu4_grdpts(25);  // for best-fit profiles: dm2 fixed
-  const int dm2_grdpts(25), ue4_grdpts(1), umu4_grdpts(25);  // for best-fit profiles: Ue4 fixed
-  //const int dm2_grdpts(25), ue4_grdpts(25), umu4_grdpts(1);  // for best-fit profiles: Um4 fixed  
+  //const int dm2_grdpts(25), ue4_grdpts(1), umu4_grdpts(25);  // for best-fit profiles: Ue4 fixed
+  //const int dm2_grdpts(25), ue4_grdpts(25), umu4_grdpts(1);  // for best-fit profiles: Um4 fixed
+  const int dm2_grdpts( griddef.dm2_grdpts ), ue4_grdpts( griddef.ue4_grdpts ), umu4_grdpts( griddef.umu4_grdpts );
   
-  const double dm2_lowbound(0.01), dm2_hibound(100);
-  //const double dm2_lowbound(dm2_data_bestfit), dm2_hibound(dm2_data_bestfit); // best-fit value
-  //const double ue4_lowbound(0.01), ue4_hibound(0.5);
-  const double ue4_lowbound(ue4_data_bestfit), ue4_hibound(ue4_data_bestfit);   // best-fit value
-  const double umu4_lowbound(0.01), umu4_hibound(0.5);
+  // const double dm2_lowbound(0.01), dm2_hibound(100);
+  // //const double dm2_lowbound(dm2_data_bestfit), dm2_hibound(dm2_data_bestfit); // best-fit value
+  // //const double ue4_lowbound(0.01), ue4_hibound(0.5);
+  // const double ue4_lowbound(ue4_data_bestfit), ue4_hibound(ue4_data_bestfit);   // best-fit value
+  // const double umu4_lowbound(0.01), umu4_hibound(0.5);
   //const double umu4_lowbound(um4_data_bestfit), umu4_hibound(um4_data_bestfit);
+  const double dm2_lowbound(  griddef.dm2_lowbound ),  dm2_hibound(  griddef.dm2_hibound );
+  const double ue4_lowbound(  griddef.ue4_lowbound ),  ue4_hibound(  griddef.ue4_hibound );
+  const double umu4_lowbound( griddef.umu4_lowbound ), umu4_hibound( griddef.umu4_hibound );
+  
   // tag for some save files
   std::string tag = "DL_full";
-  // Number of universes!
-  const int nFakeExp(1000);
+
   // --------------------------------------------------
 
   // For profiling
@@ -80,19 +97,19 @@ int main(int argc, char* argv[]){
   // (2) calculate the log(dm^2) shift to align that closest grid to the data bestfit value
   int idx_nearest_dm2 = -1;
   float offset_logdm = 0;
-  if ( dm2_grdpts>1 ) {
-    float min_offset = 1e9;
-    float bestfit_logdm = TMath::Log10(sqrt(dm2_data_bestfit));
-    for (int i=0; i<=dm2_grdpts; i++) {
-      float grid_logdm = float(i)/float(dm2_grdpts)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) + TMath::Log10(sqrt(dm2_lowbound));
-      float offset = bestfit_logdm-grid_logdm;
-      if ( fabs(offset)<fabs(min_offset) ) {
-	min_offset = offset;
-	idx_nearest_dm2 = i;
-      }
-    }
-    offset_logdm = min_offset;
-  }
+  // if ( dm2_grdpts>1 ) {
+  //   float min_offset = 1e9;
+  //   float bestfit_logdm = TMath::Log10(sqrt(dm2_data_bestfit));
+  //   for (int i=0; i<=dm2_grdpts; i++) {
+  //     float grid_logdm = float(i)/float(dm2_grdpts)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) + TMath::Log10(sqrt(dm2_lowbound));
+  //     float offset = bestfit_logdm-grid_logdm;
+  //     if ( fabs(offset)<fabs(min_offset) ) {
+  // 	min_offset = offset;
+  // 	idx_nearest_dm2 = i;
+  //     }
+  //   }
+  //   offset_logdm = min_offset;
+  // }
   std::cout << "nearest dm2 gridpoint: " << idx_nearest_dm2 << std::endl;
   std::cout << "offset logdm: " << offset_logdm << std::endl;  
   
@@ -102,27 +119,26 @@ int main(int argc, char* argv[]){
   SBNllminimizer minimizer( xml );
   std::cout<<"Initialized minimizer"<<std::endl;
 
-  // make array to  get the parameter ids and match to the entry we want
-  std::vector<std::vector<float>> params_v;
-  for(int mi_base = 0; mi_base <dm2_grdpts; mi_base++){
-    for(int uei_base = 0; uei_base < ue4_grdpts; uei_base++){
-      for(int umui_base = 0; umui_base < umu4_grdpts; umui_base++){
-      	std::vector<float> params {mi_base, uei_base, umui_base};
-      	params_v.push_back(params);
-      }
-    }
-  }
   // now get the parameters we are testing
   // specific_entry=0;
-  int mi_base = params_v[specific_entry][0];
-  int uei_base = params_v[specific_entry][1];
-  int umui_base = params_v[specific_entry][2];
+  int mi_base   = griddef.binindex_v[specific_entry][0];
+  int uei_base  = griddef.binindex_v[specific_entry][1];
+  int umui_base = griddef.binindex_v[specific_entry][2];
 
+  int mnu_base = sqrt( griddef.oscpar_v[specific_entry][0] );
+  int ue_base  = griddef.oscpar_v[specific_entry][1];
+  int um_base  = griddef.oscpar_v[specific_entry][2];
+  
   // open output files
   std::ofstream chifile;
   std::string textid = ZeroPadNumber(specific_entry, 5);
   chifile.open("chis_seek_"+textid+".txt", std::ios_base::app);
+  
+  std::ofstream pseudofile;
+  pseudofile.open( "pseudoexp_"+textid+".txt", std::ios_base::app );
 
+  std::ofstream fitresult_file;
+  fitresult_file.open( "fitresult_"+textid+".txt", std::ios_base::app );
 
   // load in saved cvSpec - change to your location
   SBNspec cvSpec("/cluster/tufts/wongjiradlabnu/kmason03/whipping_star/data/MassSpectraBigBins/"+tag+"_Bkg.SBNspec.root",xml);
@@ -141,18 +157,19 @@ int main(int argc, char* argv[]){
   TMatrixD * cvFracSys_collapsed =(TMatrixD*)fsys->Get("frac_covariance");
   int a = cvChi.FillCollapsedFractionalMatrix(cvFracSys_collapsed);
 
-  // there were 400 mass spectra pregenerated in the original version
-  //  - this makes sure the grid points line up
-  int mi_base_new = mi_base*(400/dm2_grdpts);
-  //mnu =m41, ue4 = sqrt(.5sin^2(2theta14)), um4 = sqrt(.5sin^2(2theta24)), sin2 term = 4(ue4**2)(um4**2
-  float ue_base = pow(10.,(uei_base/float(ue4_grdpts)*TMath::Log10(ue4_hibound/ue4_lowbound) + TMath::Log10(ue4_lowbound)));
-  float um_base = pow(10.,(umui_base/float(umu4_grdpts)*TMath::Log10(umu4_hibound/umu4_lowbound) + TMath::Log10(umu4_lowbound)));
-  //float mnu_base = pow(10.,((mi_base_new+.5)/float(400)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) + TMath::Log10(sqrt(dm2_lowbound))));
-  float mnu_base = float(mi_base)/float(dm2_grdpts)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) + TMath::Log10(sqrt(dm2_lowbound));
-  if ( dm2_grdpts>1 ) {
-    mnu_base += offset_logdm;
-  }
-  mnu_base = pow( 10., mnu_base );
+  // following is obsolete now that we rely on Maya's grid
+  // // there were 400 mass spectra pregenerated in the original version
+  // //  - this makes sure the grid points line up
+  // int mi_base_new = mi_base*(400/dm2_grdpts);
+  // //mnu =m41, ue4 = sqrt(.5sin^2(2theta14)), um4 = sqrt(.5sin^2(2theta24)), sin2 term = 4(ue4**2)(um4**2
+  // float ue_base = pow(10.,(uei_base/float(ue4_grdpts)*TMath::Log10(ue4_hibound/ue4_lowbound) + TMath::Log10(ue4_lowbound)));
+  // float um_base = pow(10.,(umui_base/float(umu4_grdpts)*TMath::Log10(umu4_hibound/umu4_lowbound) + TMath::Log10(umu4_lowbound)));
+  // //float mnu_base = pow(10.,((mi_base_new+.5)/float(400)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) + TMath::Log10(sqrt(dm2_lowbound))));
+  // float mnu_base = float(mi_base)/float(dm2_grdpts)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) + TMath::Log10(sqrt(dm2_lowbound));
+  // if ( dm2_grdpts>1 ) {
+  //   mnu_base += offset_logdm;
+  // }
+  // mnu_base = pow( 10., mnu_base );
   
   // calculate scaling factors (sin^2(2theta) value)
   float e_app = 4*pow(ue_base,2)*pow(um_base,2);
@@ -182,6 +199,7 @@ int main(int argc, char* argv[]){
   // make the chi object and fill cov matrix for this point
   SBNchi TrueChi(oscSpec, *covFracSys);
   TrueChi.ReloadCoreSpectrum(&oscSpec);
+  TrueChi.InitRandomNumberSeeds( (double)specific_entry );
   fsys->cd();
   TMatrixD * oscFracSys_collapsed =(TMatrixD*)fsys->Get("frac_covariance");
   int b = TrueChi.FillCollapsedFractionalMatrix(oscFracSys_collapsed);
@@ -196,10 +214,34 @@ int main(int argc, char* argv[]){
   TrueChi.pseudo_from_collapsed = true;
   TrueChi.GeneratePseudoExperiment();
 
+  float tot_pseudo = 0.0;
+  float tot_gridscan = 0.0;
+  float tot_simplex = 0.0;
+  float tot_migrad = 0.0;
+
   // Across several fake experiments for this grid point:
   for(int expi = 0; expi < nFakeExp; expi++){
+
+    // ===================================================
+    // START OF PSEUDOEXPERIMENT FIT ROUTINE
+    // ===================================================
+
+    auto start_pseudoexp = high_resolution_clock::now();
+    
     std::cout<<"EXPERIMENT NUMBER: "<<expi<<std::endl;
     std::vector<float> fakeData = TrueChi.GeneratePseudoExperiment();
+
+    fitresult_file << "----------------------------" << std::endl;    
+
+    // save pseudo-experiment draw to text file
+    pseudofile << "[" << expi << "] ";
+    fitresult_file << "[" << expi << "] ";
+    for ( auto& bincount : fakeData ) {
+      pseudofile  << bincount << " ";
+      fitresult_file << bincount << " ";
+    }
+    pseudofile << std::endl;
+    fitresult_file << std::endl;
 
     // option to hardcode fakedata spectrum for testing
     if(false){
@@ -207,29 +249,89 @@ int main(int argc, char* argv[]){
     }
 
     // get the -2llh at the throw point (pt)
-    TMatrixD cov_pt =GetTotalCov(fakeData, oscSpec, *oscFracSys_collapsed);
-    float ptfit =GetLLHFromVector(fakeData, oscSpec, cov_pt, false);
+    TMatrixD cov_pt = GetTotalCov(fakeData, oscSpec, *oscFracSys_collapsed);
+    float ptfit     = GetLLHFromVector(fakeData, oscSpec, cov_pt, false);
+    fitresult_file << "ptfit: " << ptfit << std::endl;
 
+    // ===================================================
+    // the fit procedures
+    // ===================================================
+    
     // option to run traditional grid search
     float chi_min_grid =1000000;
-    if(false){
-      float e_app_in = 4*pow(ue_base,2)*pow(um_base,2);
-      float e_dis_in = 4*pow(ue_base,2)*(1-pow(ue_base,2));
-      float m_dis_in = 4*pow(um_base,2)*(1-pow(um_base,2));
-      int numgridpts =25;
+
+    // now do a grid search to draw confidence levels
+    // we want to know the best locations
+    class grid_result_t {
+    public:
+      grid_result_t()
+	: llh(0),
+	  mi(0),
+	  uei(0),
+	  umui(0)
+      {};
+      grid_result_t( float llh_, int mi_, int uei_, int umui_ )
+	: llh(llh_),
+	  mi(mi_),
+	  uei(uei_),
+	  umui(umui_)
+      {};
+      virtual ~grid_result_t() {};
+      
+      bool operator<( const grid_result_t& rhs ) const
+      {
+	if ( llh < rhs.llh )
+	  return true;
+	return false;
+      };
+      
+      float llh;
+      int mi;
+      int uei;
+      int umui;
+      
+    };
+
+    auto start_gridscan = high_resolution_clock::now();    
+    
+    std::vector< grid_result_t > result_list_v; /// container to put in results
+    int num_sorts = 0;
+    
+    if(true){
+
+      // strided grid search
+      int mi_stride   = 20; //  5 pts
+      int uei_stride  = 10; //  5 pts
+      int umui_stride = 10; //  5 pts
+      // result is a 5x5x5=125 pt search on the grid
+      
+      int num_results = (griddef.dm2_grdpts/mi_stride)*(griddef.ue4_grdpts/uei_stride)*(griddef.umu4_grdpts/umui_stride);
+      result_list_v.reserve( num_results );
+
+      // float e_app_in = 4*pow(ue_base,2)*pow(um_base,2);
+      // float e_dis_in = 4*pow(ue_base,2)*(1-pow(ue_base,2));
+      // float m_dis_in = 4*pow(um_base,2)*(1-pow(um_base,2));
+
+      float uei_min, umui_min, dmi_min;
 
       // loop over all the grid points
-      for(int mi_in = 0; mi_in <numgridpts; mi_in++){
-        std::cout<<mi_in<<std::endl;
-        for(int uei_in = 0; uei_in < numgridpts; uei_in++){
-          for(int umui_in = 0; umui_in < numgridpts; umui_in++){
-            int mi_in_new = mi_in*(400/numgridpts);
-            float ue_val = pow(10.,(uei_in/float(numgridpts)*TMath::Log10(ue4_hibound/ue4_lowbound) + TMath::Log10(ue4_lowbound)));
-            float um_val = pow(10.,(umui_in/float(numgridpts)*TMath::Log10(umu4_hibound/umu4_lowbound) + TMath::Log10(umu4_lowbound)));
-            //float mnu_val = pow(10.,((mi_in+.5)/float(400)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) + TMath::Log10(sqrt(dm2_lowbound))));
-	    float mnu_val = float(mi_in)/float(numgridpts)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) + TMath::Log10(sqrt(dm2_lowbound));
-	    mnu_val += offset_logdm;
-	    mnu_val = pow(10.,mnu_val);
+      for(int mi_in = 0; mi_in <griddef.dm2_grdpts; mi_in += mi_stride ){
+        for(int uei_in = 0; uei_in < griddef.ue4_grdpts; uei_in += uei_stride ){
+          for(int umui_in = 0; umui_in < griddef.umu4_grdpts; umui_in += umui_stride ){
+
+	    int kindex = griddef.binindex_to_kindex( mi_in, uei_in, umui_in );
+	    
+            // int mi_in_new = mi_in*(400/numgridpts);
+            // float ue_val = pow(10.,(uei_in/float(numgridpts)*TMath::Log10(ue4_hibound/ue4_lowbound) + TMath::Log10(ue4_lowbound)));
+            // float um_val = pow(10.,(umui_in/float(numgridpts)*TMath::Log10(umu4_hibound/umu4_lowbound) + TMath::Log10(umu4_lowbound)));
+            // //float mnu_val = pow(10.,((mi_in+.5)/float(400)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) + TMath::Log10(sqrt(dm2_lowbound))));
+	    // float mnu_val = float(mi_in)/float(numgridpts)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) + TMath::Log10(sqrt(dm2_lowbound));
+	    // mnu_val += offset_logdm;
+	    // mnu_val = pow(10.,mnu_val);
+
+	    float ue_val = griddef.Ue4_bin_v[ uei_in ];
+	    float um_val = griddef.Umu4_bin_v[ umui_in ];
+	    float mnu_val = sqrt( griddef.dm2_bin_v[ mi_in ] );
 
             // get the oscillated spectra and covariance matrix
             SBNspec inSpec =  minimizer.getOscSpectra( mnu_val, ue_val, um_val );
@@ -242,50 +344,238 @@ int main(int argc, char* argv[]){
             float chi_test = GetLLHFromVector(fakeData, inSpec, cov_grid, false);
             delete inFracSys_collapsed;
 
+	    // save the result
+	    result_list_v.push_back( grid_result_t( chi_test, mi_in, uei_in, umui_in ) );
+	    
             if (chi_test<chi_min_grid){
               chi_min_grid = chi_test;
+	      dmi_min = mi_in;
+	      uei_min = uei_in;
+	      umui_min = umui_in;
             }
           }
         }
       }
+
+      std::sort( result_list_v.begin(), result_list_v.end() );
+      
+      // print the top results
+      std::cout << "GRID MINIMUM" << std::endl;
+      std::cout<< "chi2=" << chi_min_grid
+	       << " binidex=( " << dmi_min << ", " << uei_min << ", " << umui_min << ") "
+	       << " par=(" << griddef.dm2_bin_v[dmi_min] << ", " << griddef.Ue4_bin_v[uei_min] << ", " << griddef.Umu4_bin_v[umui_min] << ")"
+	       << std::endl;
+
+      std::cout << "GRID BEST POINTS" << std::endl;
+      int iresult =0 ;
+      for ( auto& result : result_list_v ) {
+	std::cout << "[" << iresult << "] chi2=" << result.llh
+		  << " grid_index=(" << result.mi << ", " << result.uei << ", " << result.umui << ")"
+		  << std::endl;
+	iresult++;
+      }
+      
     }// end of if to run traditional grid search
+
+    auto stop_gridscan = high_resolution_clock::now();
+    auto duration_gridscan = duration_cast<milliseconds>(stop_gridscan - start_gridscan);
     
-    // now run the minimizer
-    double bestfit = minimizer.doFit( fakeData, mnu_base, ue_base, um_base )[0];
-    // double bestfit = 0;
+    // use top grid points to seed simplex minimizer
+    minimizer.algoName = "Simplex";
+    
+    class simplex_result_t {
+      
+    public:
+      simplex_result_t()
+	: llh(0),
+	  mi(0),
+	  uei(0),
+	  umui(0)      
+      {};
+      simplex_result_t( float llh_, float mi_, float uei_, float umui_ )
+	: llh(llh_),
+	  mi(mi_),
+	  uei(uei_),
+	  umui(umui_)
+      {};
+      virtual ~simplex_result_t() {};
+      
+      bool operator<( const simplex_result_t& rhs ) const
+      {
+	if ( llh < rhs.llh )
+	  return true;
+	return false;
+      };
+      
+      float llh;
+      float mi;
+      float uei;
+      float umui;
+      
+    };
+    
+    std::vector< simplex_result_t > simplex_v;
+    std::vector<double> beststart(4,1.0e3);
+    double min_minimizer = 1e6;
+    
+    auto start_simplex = high_resolution_clock::now();
+    
+    if(DO_SIMPLEX_SEARCH){
+      
+      std::vector<double> temp;
+      
+      std::cout<<"starting data fit loop"<<std::endl;
+      
+      for (int iiresult=0; iiresult<NTOP_GRID_TO_FIT; iiresult++) {
+	if ( iiresult>=result_list_v.size() )
+	  break;
 
+	auto const& result = result_list_v.at(iiresult);
+	
+	// int startval = 5*x;
+	// int numgridpts=25;
+	// float ue_val = pow(10.,(startval/float(numgridpts)*TMath::Log10(ue4_hibound/ue4_lowbound) + TMath::Log10(ue4_lowbound)));
+	// float um_val = pow(10.,(startval/float(numgridpts)*TMath::Log10(umu4_hibound/umu4_lowbound) + TMath::Log10(umu4_lowbound)));
+	// float mnu_val = pow(10.,((startval/float(numgridpts))+.5)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) + TMath::Log10(sqrt(dm2_lowbound)) );
+	int uei_base = result.uei;
+	int umui_base = result.umui;
+	
+	float ue_base = pow(10.,(uei_base/float(ue4_grdpts)*TMath::Log10(ue4_hibound/ue4_lowbound) + TMath::Log10(ue4_lowbound)));
+	float um_base = pow(10.,(umui_base/float(umu4_grdpts)*TMath::Log10(umu4_hibound/umu4_lowbound) + TMath::Log10(umu4_lowbound)));
+	float mnu_base = sqrt( griddef.dm2_bin_v[ result.mi ] );
 
-    // trying a variety of starts
-    double min_minimizer =100000000;
-    std::vector<float> beststart;
-    if(true){
-      std::cout<<"starting loop"<<std::endl;
-      double temp;
-      // std::vector<float> m_v={0.01,2,8};
-      // std::vector<float> u_v={0.01,0.08,0.4};
-      for(int x=0;x<5;x++){
-            int startval = 5*x;
-            int numgridpts=25;
-            float ue_val = pow(10.,(startval/float(numgridpts)*TMath::Log10(ue4_hibound/ue4_lowbound) + TMath::Log10(ue4_lowbound)));
-            float um_val = pow(10.,(startval/float(numgridpts)*TMath::Log10(umu4_hibound/umu4_lowbound) + TMath::Log10(umu4_lowbound)));
-            float mnu_val = pow(10.,((startval*(500/float(numgridpts))+.5)/float(400)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) + TMath::Log10(sqrt(dm2_lowbound))));
+	fitresult_file << result.llh << " " // chi2
+		       << result.mi  << " " << result.uei << " " << result.umui << " " // bin indices
+		       << griddef.dm2_bin_v[ result.mi ] << " " << griddef.Ue4_bin_v[result.uei] << " " << griddef.Umu4_bin_v[result.umui]; // osc par values
+	
+	temp = minimizer.doFit( fakeData, mnu_base, ue_base , um_base );
 
-            temp = minimizer.doFit( fakeData, mnu_val,ue_val,um_val)[0];
-            if (temp < min_minimizer){
-              min_minimizer=temp;
-              // beststart={m_v[x],u_v[y],u_v[z]};
-          //   }
-          // }
-        }
+	fitresult_file << " "
+		       << temp[0] << " " // post minimizer chi2
+		       << temp[1] << " " << temp[2] << " " << temp[3] // fitted osc par values
+		       << std::endl;
+	
+	if (temp[0] < min_minimizer){
+	  min_minimizer=temp[0];
+	  beststart=temp;
+	}
+	
+	simplex_v.push_back( simplex_result_t( temp[0], sqrt(temp[1]), temp[2], temp[3] ) );
+	
       } //end of loop over start points
+      
+      // std::cout << "PAST MINIMUM"  << std::endl;
+      // temp = minimizer.doFit( data_v, sqrt(3.70), 0.6, 0.0 );
+      // if ( temp[0] < min_minimizer ) {
+      //   min_minimizer = temp[0];
+      //   beststart = temp;
+      // }
+
+      std::sort( simplex_v.begin(), simplex_v.end() );
+      
+      std::cout << "SIMPLEX RESULTS" << std::endl;
+      int isimplex = 0;
+      for (auto& simplex : simplex_v ) {
+	std::cout << "[" << isimplex << "] chi2=" << simplex.llh
+		  << " mu=" << simplex.mi << " Ue4=" << simplex.uei << " Umu4=" << simplex.umui
+		  << std::endl;
+      }
+      
+    }//end of it SIMPLEX SEARCH
+
+    auto stop_simplex = high_resolution_clock::now();
+    auto duration_simplex = duration_cast<milliseconds>(stop_simplex - start_simplex);  
+
+    // now run the minimizer
+    auto start_migrad = high_resolution_clock::now();  
+    minimizer.algoName = "MIGRAD";
+    
+    std::vector<double> migrad_result
+      = minimizer.doFit( fakeData, simplex_v.front().mi, simplex_v.front().uei, simplex_v.front().umui );
+
+    std::cout << "FINAL MIGRAD RESULT" << std::endl;
+    std::cout << "[0] chi2=" << migrad_result[0]
+	      << " mu=" << migrad_result[1] << " Ue4=" << migrad_result[2] << " Umu4=" << migrad_result[3]
+	      << std::endl;
+    fitresult_file << migrad_result[0] << " "
+		   << migrad_result[1] << " "
+		   << migrad_result[2] << " "
+		   << migrad_result[3]
+		   << std::endl;
+    
+    auto stop_migrad = high_resolution_clock::now();
+    auto duration_migrad = duration_cast<milliseconds>(stop_migrad - start_migrad);  
+    
+    // SAVE BEST FIT
+    if ( simplex_v.front().llh < migrad_result[0] ) {
+      // save simplex output instead
+      beststart[0] = simplex_v.front().llh;
+      beststart[1] = simplex_v.front().mi*simplex_v.front().mi;
+      beststart[2] = simplex_v.front().uei;
+      beststart[3] = simplex_v.front().umui;
+    }
+    else {
+      beststart = migrad_result;
     }
 
-    chifile<<ptfit<<std::endl;
-    // chifile<<bestfit<<std::endl;
-    chifile<<min_minimizer<<std::endl;
-    // chifile<<chi_min_grid<<std::endl;
+    auto stop_pseudoexp = high_resolution_clock::now();
+    auto duration_pseudoexp = duration_cast<milliseconds>(stop_pseudoexp - start_pseudoexp);
+
+    fitresult_file << "time: "
+		   << duration_pseudoexp.count() << " "
+		   << duration_gridscan.count() << " "
+		   << duration_simplex.count() << " "            
+		   << duration_migrad.count()
+		   << std::endl;
+
+    tot_pseudo += duration_pseudoexp.count();
+    tot_gridscan += duration_gridscan.count();
+    tot_simplex += duration_simplex.count();
+    tot_migrad += duration_migrad.count();
+    
+    // // trying a variety of starts
+    // double min_minimizer =100000000;
+    // std::vector<float> beststart;
+    // if(true){
+    //   std::cout<<"starting loop"<<std::endl;
+    //   double temp;
+    //   // std::vector<float> m_v={0.01,2,8};
+    //   // std::vector<float> u_v={0.01,0.08,0.4};
+    //   for(int x=0;x<5;x++){
+    //         int startval = 5*x;
+    //         int numgridpts=25;
+    //         float ue_val = pow(10.,(startval/float(numgridpts)*TMath::Log10(ue4_hibound/ue4_lowbound) + TMath::Log10(ue4_lowbound)));
+    //         float um_val = pow(10.,(startval/float(numgridpts)*TMath::Log10(umu4_hibound/umu4_lowbound) + TMath::Log10(umu4_lowbound)));
+    //         float mnu_val = pow(10.,((startval*(500/float(numgridpts))+.5)/float(400)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) + TMath::Log10(sqrt(dm2_lowbound))));
+
+    //         temp = minimizer.doFit( fakeData, mnu_val,ue_val,um_val)[0];
+    //         if (temp < min_minimizer){
+    //           min_minimizer=temp;
+    //           // beststart={m_v[x],u_v[y],u_v[z]};
+    //       //   }
+    //       // }
+    //     }
+    //   } //end of loop over start points
+    // }    
+    chifile << expi << " " << ptfit << " " << beststart[0] << " " << beststart[1] << " " << beststart[2] << " " << beststart[3] << std::endl;
+    
   } //end of fake experiment loop
+
+  fitresult_file << "---------------------------------" << std::endl;
+  fitresult_file << "total times: "
+		 << tot_pseudo << " "
+		 << tot_gridscan << " "
+		 << tot_simplex << " "            
+		 << tot_migrad
+		 << std::endl;
+  
+  
+  std::cout << "DONE!!" << std::endl;
+  fitresult_file.close();
+  
   return 0;
+
+  
 } // end of main function
 
 TMatrixD GetTotalCov(const std::vector<float>& obsSpec, const SBNspec& expSpec, const TMatrixD& Mfracsys){
