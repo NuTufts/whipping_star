@@ -16,6 +16,7 @@ add_executable (DL3plus1_testregen DL3plus1_testregen.cc)
 add_executable (DL3plus1_FCwregen DL3plus1_FCwregen.cc)
 add_executable (DL3plus1_data_wregen DL3plus1_data_wregen.cc)
 add_executable (DL3plus1_genpseudo_wregen DL3plus1_genpseudo_wregen.cc)
+add_executable (dump_bins dump_bins.cc)
 
 #message("root libs: ${ROOT_LIBRARY_DIR}")
 #message("root libs: ${ROOT_LIBRARIES}")

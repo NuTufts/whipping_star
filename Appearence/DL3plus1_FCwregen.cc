@@ -68,7 +68,16 @@ int main(int argc, char* argv[]){
   // const double um4_data_bestfit = 0.135;
 
   GridDefinition griddef;
-  griddef.define_maya_grid();       
+  
+  //griddef.define_maya_grid();
+  // int mi_stride   = 20; //  5 pts
+  // int uei_stride  = 10; //  5 pts
+  // int umui_stride = 10; //  5 pts
+  
+  griddef.define_proper_bounds_course();
+  int mi_stride   = 5; //  5 pts
+  int uei_stride  = 2; //  5 pts
+  int umui_stride = 2; //  5 pts
   
   //const int dm2_grdpts(25), ue4_grdpts(25), umu4_grdpts(25);
   //const int dm2_grdpts(1), ue4_grdpts(25), umu4_grdpts(25);  // for best-fit profiles: dm2 fixed
@@ -300,9 +309,6 @@ int main(int argc, char* argv[]){
     if(true){
 
       // strided grid search
-      int mi_stride   = 20; //  5 pts
-      int uei_stride  = 10; //  5 pts
-      int umui_stride = 10; //  5 pts
       // result is a 5x5x5=125 pt search on the grid
       
       int num_results = (griddef.dm2_grdpts/mi_stride)*(griddef.ue4_grdpts/uei_stride)*(griddef.umu4_grdpts/umui_stride);

@@ -1,6 +1,9 @@
 #ifndef __GRID_DEFINITION_H__
 #define __GRID_DEFINITION_H__
 
+#include <vector>
+#include "TMath.h"
+
 class GridDefinition {
 
  public:
@@ -73,16 +76,70 @@ class GridDefinition {
 
     Ue4_bin_v.resize(ue4_grdpts+1,0.0);
     for (int uei_base=0; uei_base<ue4_grdpts; uei_base++) {
-      float ue_base = pow(10.,(uei_base/float(ue4_grdpts-1)*TMath::Log10(ue4_hibound/ue4_lowbound) + TMath::Log10(ue4_lowbound)));
+      //float ue_base = pow(10.,(uei_base/float(ue4_grdpts-1)*TMath::Log10(ue4_hibound/ue4_lowbound) + TMath::Log10(ue4_lowbound)));
+      float ue_base = pow(10.,(uei_base/float(ue4_grdpts)*TMath::Log10(ue4_hibound/ue4_lowbound) + TMath::Log10(ue4_lowbound)));
       Ue4_bin_v[uei_base] = ue_base;
     }
 
     Umu4_bin_v.resize(umu4_grdpts+1,0.0);
     for (int umui_base=0; umui_base<umu4_grdpts; umui_base++) {
-      float umu_base = pow(10.,(umui_base/float(umu4_grdpts-1)*TMath::Log10(umu4_hibound/umu4_lowbound) + TMath::Log10(umu4_lowbound)));
+      //float umu_base = pow(10.,(umui_base/float(umu4_grdpts-1)*TMath::Log10(umu4_hibound/umu4_lowbound) + TMath::Log10(umu4_lowbound)));
+      float umu_base = pow(10.,(umui_base/float(umu4_grdpts)*TMath::Log10(umu4_hibound/umu4_lowbound) + TMath::Log10(umu4_lowbound)));
       Umu4_bin_v[umui_base] = umu_base;
     }
 
+    // define list of oscpars
+    int kindex = 0;
+    for(int mi_base = 0; mi_base < dm2_grdpts; mi_base += 1 ){
+      for(int uei_base = 0; uei_base < ue4_grdpts; uei_base += 1 ){
+	for(int umui_base = 0; umui_base < umu4_grdpts; umui_base += 1 ) {
+	  std::vector<float> gridpt_oscpar = { dm2_bin_v[mi_base], Ue4_bin_v[uei_base], Umu4_bin_v[umui_base] };
+	  oscpar_v.push_back( gridpt_oscpar );
+	  std::vector<int>   gridpt_index  = { mi_base, uei_base, umui_base };
+	  binindex_v.push_back( gridpt_index );
+	  kindex++;
+	}
+      }
+    }
+    return;
+  };
+
+
+  void define_proper_bounds_course() {
+
+    // Grid definition    
+    dm2_grdpts  = 25;
+    ue4_grdpts  = 10;
+    umu4_grdpts = 10;
+
+    dm2_lowbound  = 0.01;
+    dm2_hibound   = 100.0;
+    ue4_lowbound  = 0.01;
+    ue4_hibound   = 0.70710678118;
+    umu4_lowbound = 0.01;
+    umu4_hibound  = 0.70710678118;    
+
+    oscpar_v.reserve( dm2_grdpts*ue4_grdpts*umu4_grdpts );
+    binindex_v.reserve( dm2_grdpts*ue4_grdpts*umu4_grdpts );
+    
+    dm2_bin_v.resize(dm2_grdpts,0);
+    for (int i=0; i<dm2_grdpts; i++) {
+      float mnu_base = pow(10.0, (i/float(dm2_grdpts-1))*TMath::Log10(dm2_hibound/dm2_lowbound) + TMath::Log10(dm2_lowbound) );
+      dm2_bin_v[i] = mnu_base;
+    }
+    
+    Ue4_bin_v.resize(ue4_grdpts,0.0);
+    for (int uei_base=0; uei_base<ue4_grdpts; uei_base++) {
+      float ue_base = pow(10.,(uei_base/float(ue4_grdpts-1)*TMath::Log10(ue4_hibound/ue4_lowbound) + TMath::Log10(ue4_lowbound)));
+      Ue4_bin_v[uei_base] = ue_base;
+    }
+    
+    Umu4_bin_v.resize(umu4_grdpts,0.0);
+    for (int umui_base=0; umui_base<umu4_grdpts; umui_base++) {
+      float umu_base = pow(10.,(umui_base/float(umu4_grdpts-1)*TMath::Log10(umu4_hibound/umu4_lowbound) + TMath::Log10(umu4_lowbound)));
+      Umu4_bin_v[umui_base] = umu_base;
+    }
+    
     // define list of oscpars
     int kindex = 0;
     for(int mi_base = 0; mi_base < dm2_grdpts; mi_base += 1 ){
