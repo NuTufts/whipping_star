@@ -73,7 +73,9 @@ namespace sbn{
             SBNchi(SBNspec, bool is_stat_only);
             SBNchi(std::string);
 
-
+            // Destructor
+            virtual ~SBNchi();
+      
             //This is the core spectra that you are comparing too. This is used to calculate covariance matrix and in a way is on the 'bottom' of the chi^2.
             SBNspec core_spectrum;
             bool is_stat_only;

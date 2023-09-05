@@ -9,6 +9,8 @@ namespace sbn {
 
   SBNllminimizer* SBNllminimizer::_active_copy = NULL;
 
+  std::vector<double> SBNllminimizer::llh_components_v = { 0, 0, 0};
+
   SBNllminimizer::SBNllminimizer( std::string xml_config )
     : _osc_model(0.01,0.707,0.707), // these values are arbitrary
       _gen( xml_config, _osc_model, true ),
@@ -16,11 +18,18 @@ namespace sbn {
       nBins_e(12), // this needs to be not hard-coded
       nBins_mu(19),
       nBins(31),
-      use_polar_coords(true),
-      algoName("Simplex"), //Migrad, Seek
+      use_polar_coords(false),
+      fit_only_one_par(false), // if true, we fix the parameters for all but one parameter
+      unfixed_par_index(-1),
+      fix_one_par(false),
+      fixed_par_index(-1),
+      algoName("Simplex"), //Migrad, Seek      
       covFracSys(NULL)
   {
-
+    // set as active copy if the first instance made
+    if ( !_active_copy )
+      _active_copy = this;
+    
     // get the config obj through SBNgen
     TiXmlDocument doc(_gen.xmlname.c_str());
     bool loadOkay = doc.LoadFile();
@@ -106,7 +115,7 @@ namespace sbn {
       // convert from polar coordinates
       SBNllminimizer::PolarToU( par[1], par[2], Ue4, Um4 );
     }
-    
+
     float e_app  = 4*pow(Ue4,2)*pow(Um4,2);     // sin^2(2theta_mue)
     float e_dis  = 4*pow(Ue4,2)*(1-pow(Ue4,2)); // sin^2(2theta_ee)
     float m_dis  = 4*pow(Um4,2)*(1-pow(Um4,2)); // sin^2(2theta_mumu)
@@ -139,15 +148,19 @@ namespace sbn {
     _active_copy->_chi->ReloadCoreSpectrum( &(_active_copy->_gen.spec_central_value) );
 
     // get fractional inverse cov matrix
-    TFile * fsys = new TFile( "/cluster/tufts/wongjiradlabnu/kmason03/whipping_star/data/systematics/katieversion_bigbins_tot_copy.SBNcovar.root","read");
-    TMatrixD * inv_frac_cov =(TMatrixD*)fsys->Get("frac_covariance");
-    SBNchi oscChi( _active_copy->_gen.spec_central_value, *inv_frac_cov);
-    int b = oscChi.FillCollapsedFractionalMatrix( inv_frac_cov );
+    //TFile * fsys = new TFile( "/cluster/tufts/wongjiradlabnu/kmason03/whipping_star/data/systematics/katieversion_bigbins_tot_copy.SBNcovar.root","read");
+    //TMatrixD * inv_frac_cov =(TMatrixD*)fsys->Get("frac_covariance");
+    //SBNchi oscChi( _active_copy->_gen.spec_central_value, *inv_frac_cov);
+    SBNchi oscChi( _active_copy->_gen.spec_central_value, *(_active_copy->covFracSys) ); // pass-by-copy AND copied in constructor
+    TMatrixD inv_frac_cov;
+    int b = oscChi.FillCollapsedFractionalMatrix( &inv_frac_cov ); // modifies and fills the matrix with collapsed frac sys
 
-    // std::cout<<"temp cov: "<<logdm2*logdm2<< Ue4<< Um4;
+    // this is varying from call to call as the relative contributions are modified by oscillations
+    // changing the flux more or less
+    // std::cout<<"temp cov: "<<logdm2*logdm2 << " " << Ue4 << " " << Um4 << std::endl;
     // for(short i = 0; i < 31; i++){
     //   for(short j = 0; j < 31; j++){
-    //     std::cout<< (*inv_frac_cov)(i,j)<<" ";
+    //     std::cout<< inv_frac_cov(i,j)<<" ";
     //   }
     //   std::cout<<std::endl;
     // }
@@ -155,14 +168,15 @@ namespace sbn {
     // scalce frac inverse cov matrix to expectation and include CNP stat error to the diag
     TMatrixD tmpcov = SBNllminimizer::GetTotalCov(_active_copy->_observed_bins,
 						  _active_copy->_gen.spec_central_value,
-						  *inv_frac_cov );
-
+						  inv_frac_cov );
+    
 
     // calculate -2LLH
     double f = SBNllminimizer::GetLLHFromVector(_active_copy->_observed_bins,
 						_active_copy->_gen.spec_central_value,
-						tmpcov, false);
-
+						tmpcov,
+						false);
+    
     if ( std::isnan(f) || std::isinf(f) ) {
       std::cout << "SBNllminimizer::negative_likelihood_ratio NLLR is bad = " << f << std::endl;
       throw std::runtime_error("bad likelihood calculated");
@@ -171,8 +185,8 @@ namespace sbn {
       std::cout << "SBNllminimizer::negative_likelihood_ratio iter=" << _active_copy->_niters << " NLLR=" << f << std::endl;
     _active_copy->_niters++;
 
-    delete fsys;
-    delete inv_frac_cov;
+    //delete fsys;
+    //delete inv_frac_cov;
     return f;
   }
 
@@ -191,8 +205,10 @@ namespace sbn {
     min->SetFunction(f);
 
     const float dm2_lowbound(1.0e-3), dm2_hibound(1e3);
-    const float ue4_lowbound(0.0),  ue4_hibound(0.70710678118);
-    const float umu4_lowbound(0.0), umu4_hibound(0.70710678118);
+    // const float ue4_lowbound(0.0),  ue4_hibound(0.70710678118);
+    // const float umu4_lowbound(0.0), umu4_hibound(0.70710678118);
+    const float ue4_lowbound(0.0),  ue4_hibound(0.5);
+    const float umu4_lowbound(0.0), umu4_hibound(0.5);
     float logdm2_low  = log(dm2_lowbound);
     float logdm2_high = log(dm2_hibound);
 
@@ -207,6 +223,22 @@ namespace sbn {
       min->SetVariable( 2, "Um4", um_start, 0.1 );
       min->SetVariableLimits( 1, ue4_lowbound, ue4_hibound );
       min->SetVariableLimits( 2, umu4_lowbound, umu4_hibound );
+
+      if ( fit_only_one_par ){
+	for (int p=0; p<3; p++) {
+	  if ( p!=unfixed_par_index ) {
+	    min->SetVariableValue(p,fixed_par_values[p]);
+	    min->FixVariable(p);
+	  }
+	  else {
+	    min->ReleaseVariable(p);
+	  }
+	}
+      }
+      else if ( fix_one_par && fixed_par_index>=0 & fixed_par_index<3) {
+	min->SetVariableValue( fixed_par_index, fixed_par_values[fixed_par_index] );
+	min->FixVariable( fixed_par_values[fixed_par_index] );
+      }
     }
     else {
       // polar (Ue4,Um4) space to help enforce bounds: |Ue4|^2+|Um4|^2<=1/2
@@ -217,7 +249,7 @@ namespace sbn {
       min->SetVariableLimits( 1, 0, TMath::Sqrt(0.5) );
       min->SetVariableLimits( 2, 0, 1.57079632679 ); // 0 to pi/2
     }
-
+    
     min->SetMaxFunctionCalls(1000); // for Minuit/Minuit2
     min->SetMaxIterations(1000);  // for GSL
     min->SetTolerance(0.01);
@@ -295,7 +327,7 @@ namespace sbn {
     // // obsSpec: "data" vector
     // // predSpec: "MC" spectra
     // // Mfracsys: total (flux+xsec+detvar) covariance matrix
-    float chisqTest = 0;
+    double chisqTest = 0;
     int nBins = _active_copy->nBins;
     // expSpec->RemoveMCError();
 
@@ -303,24 +335,31 @@ namespace sbn {
     TMatrixD invcov = Msys;
     invcov.Invert();
 
+    llh_components_v.resize(3,0.0);
+
     // add the chi2-like part
     chisqTest = 0;
     for(int i = 0; i < nBins; i++){
       for(int j = 0; j < nBins; j++){
 	// (obsi-predi)*(invcov)*(obsj-predj)
     	if(i==j && false) std::cout<<i<<" "
-    				    <<obsSpec[i]<<" "
-    				    <<expSpec.collapsed_vector[i]<<" "
-    				    <<Msys[i][j]<<" "
-    				    <<((obsSpec[i] - expSpec.collapsed_vector[i])*invcov[i][j]*(obsSpec[j] - expSpec.collapsed_vector[j]))
-    				    <<std::endl;
+				   <<obsSpec[i]<<" "
+				   <<expSpec.collapsed_vector[i]<<" "
+				   <<Msys[i][j]<<" "
+				   <<((obsSpec[i] - expSpec.collapsed_vector[i])*invcov[i][j]*(obsSpec[j] - expSpec.collapsed_vector[j]))
+				   <<std::endl;
     	chisqTest += (obsSpec[i] - expSpec.collapsed_vector[i])*invcov[i][j]*(obsSpec[j] - expSpec.collapsed_vector[j]);
-          }
-        }
+      }
+    }
+    llh_components_v[1] = chisqTest;
     // now need ln(det(2Pi*M))
     // TMatrixD tempcov = 2*3.14159265358979323846*Msys;
     // std::cout<<"chi2: "<<chisqTest<<" det: "<<log(tempcov.Determinant())<<std::endl;
-    chisqTest += log(Msys.Determinant());
+    double MDet = log(Msys.Determinant());
+    llh_components_v[2] = MDet;
+    chisqTest += MDet;
+
+    llh_components_v[0] = chisqTest;
 
     return chisqTest;
   }//end of GetLLHFromSpectra

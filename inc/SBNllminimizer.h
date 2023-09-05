@@ -31,6 +31,31 @@ namespace sbn {
     bool use_polar_coords; // fit in polar form for U: r=|Ue4|^2+|Um4|^2 and phi=atan2(|U_e4|,|Um4|)
     std::string algoName; // options: simplex, migrad, seek
 
+    bool fit_only_one_par;
+    int  unfixed_par_index;
+    double fixed_par_values[3];
+    void onlyFitOnePar( int par_index, double* par_values ) {
+      fit_only_one_par = true;
+      fix_one_par = false;      
+      unfixed_par_index = par_index;
+      for (int i=0; i<3; i++) fixed_par_values[i] = par_values[i];
+    };
+    
+    void fitAllPars() {
+      fit_only_one_par = false;
+      fix_one_par = false;
+    };
+
+    bool fix_one_par;
+    int fixed_par_index;
+    void fixOnePar( int par_index, double* par_values ) {
+      fix_one_par = true;
+      fit_only_one_par = false;
+      fixed_par_index = par_index;
+      for (int i=0; i<3; i++)
+	fixed_par_values[i] = par_values[i];
+    };
+    
     static double negative_likelihood_ratio( const double* par );
     std::vector<double> doFit( std::vector<float>& obs_bins, float dm_start,float ue_start, float um_start );
 
@@ -52,10 +77,13 @@ namespace sbn {
 
     SBNspec getOscSpectra( float dm41, float ue4, float um4 );
 
+    static std::vector<double> llh_components_v; ///< stores the total NLL and components of last calculation
+    
   protected:
 
     int _niters; // steps we've taken
     static SBNllminimizer* _active_copy;
+
 
   };
 

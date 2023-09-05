@@ -48,12 +48,29 @@ std::vector<TMatrixT<double>> splitNormShape(TMatrixT<double> & Min,std::vector<
  * ********************************************/
 
 
+// Basic constructor
+SBNchi::SBNchi(std::string xml) :
+  SBNconfig(xml,false),
+  rangen_twister(nullptr),
+  rangen_linear(nullptr),
+  rangen_carry(nullptr),
+  rangen(nullptr),
+  m_dist_normal(nullptr)
+{};
 
-SBNchi::SBNchi(std::string xml) : SBNconfig(xml,false){};
+// Spectrum and matrix constructor chain
 SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin) : SBNchi(in,matrix_systematicsin,false){}
 SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, bool is_verbose) : SBNchi(in,matrix_systematicsin,in.xmlname, is_verbose){}
 SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, std::string inxml, bool is_verbose) : SBNchi(in, matrix_systematicsin, inxml,  is_verbose,-1){}
-SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, std::string inxml, bool is_verbose, double random_seed) : SBNconfig(inxml, is_verbose), core_spectrum(in){
+SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, std::string inxml, bool is_verbose, double random_seed) :
+  SBNconfig(inxml, is_verbose),
+  core_spectrum(in),
+  rangen_twister(nullptr),
+  rangen_linear(nullptr),
+  rangen_carry(nullptr),
+  rangen(nullptr),
+  m_dist_normal(nullptr)  
+{
 
     last_calculated_chi = -9999999;
     is_stat_only= false;
@@ -150,6 +167,17 @@ SBNchi::SBNchi(SBNspec in, bool is_is_stat_only): SBNconfig(in.xmlname), core_sp
 
 }
 
+/***********************************************
+ *		Destructor
+ * ********************************************/
+SBNchi::~SBNchi()
+{
+  if ( rangen_twister ) delete rangen_twister;
+  if ( rangen_linear  ) delete rangen_linear;
+  if ( rangen_carry   ) delete rangen_carry;
+  if ( rangen )         delete rangen;
+  if ( m_dist_normal )  delete m_dist_normal;
+}
 
 /***********************************************
  *		Rest for now

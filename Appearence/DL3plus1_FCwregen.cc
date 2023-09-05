@@ -127,6 +127,7 @@ int main(int argc, char* argv[]){
   // initialize the minimizer
   SBNllminimizer minimizer( xml );
   std::cout<<"Initialized minimizer"<<std::endl;
+  minimizer.use_polar_coords = false; 
 
   // now get the parameters we are testing
   // specific_entry=0;

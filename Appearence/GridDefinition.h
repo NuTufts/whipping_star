@@ -48,15 +48,15 @@ class GridDefinition {
     umu4_grdpts = 50;
 
     ue4_lowbound  = 0.01;
-    //ue4_hibound   = 0.5; //0.70710678118;
-    ue4_hibound   = 0.70710678118;
+    ue4_hibound   = 0.5;
+    //ue4_hibound   = 0.70710678118;
     umu4_lowbound = 0.01;
-    //umu4_hibound  = 0.5;
-    umu4_hibound  = 0.70710678118;    
+    umu4_hibound  = 0.5;
+    //umu4_hibound  = 0.70710678118;
 
     oscpar_v.reserve( dm2_grdpts*ue4_grdpts*umu4_grdpts );
     binindex_v.reserve( dm2_grdpts*ue4_grdpts*umu4_grdpts );
-
+    
     // Bin Edge definitions
     
     const float dm2_maya[101] = {0.0101158, 0.0110917, 0.0121619, 0.0133352, 0.0146218, 0.0160324, 0.0175792, 0.0192752, 0.0211349, 0.0231739,
@@ -68,6 +68,9 @@ class GridDefinition {
 				 3.6728, 4.02715, 4.41568, 4.8417, 5.30881, 5.821, 6.3826, 6.99838, 7.67357, 8.4139, 9.22565, 10.1157, 11.0917,
 				 12.1618, 13.3351, 14.6217, 16.0323, 17.5791, 19.2751, 21.1347, 23.1738, 25.4095, 27.861, 30.549, 33.4963, 36.7279,
 				 40.2714, 44.1567, 48.4168, 53.088, 58.2098, 63.8258, 69.9836, 76.7355, 84.1388, 92.2563, 112.202};
+
+    dm2_lowbound = dm2_maya[0];
+    dm2_hibound  = dm2_maya[99];
     
     dm2_bin_v.resize(dm2_grdpts+1,0);
     for (int i=0; i<=dm2_grdpts; i++) {

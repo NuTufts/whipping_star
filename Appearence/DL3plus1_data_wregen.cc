@@ -52,7 +52,7 @@ using namespace std::chrono;
 // define helper functions
 void printbinedges( const GridDefinition& griddef );
 TMatrixD GetTotalCov(const std::vector<float>& obsSpec,const SBNspec& expSpec,const TMatrixD& Mfracsys);
-float GetLLHFromVector(const std::vector<float>& obsSpec, const SBNspec& expSpec,const TMatrixD& Msys,bool prints);
+float GetLLHFromVector(const std::vector<float>& obsSpec, const SBNspec& expSpec,const TMatrixD& Msys,std::vector<float>& lln_components,bool prints);
 void testfcn(Int_t &npar, Double_t *gin, Double_t &f, Double_t *par, Int_t iflag);
 std::string ZeroPadNumber(int num, int digits);
 
@@ -65,6 +65,7 @@ bool DO_GRID_CHI2_CALC = true;
 bool DO_FULL_GRID_CHI2_CALC = false;
 bool DO_SIMPLEX_SEARCH = true;
 bool DO_DATA_FIT = true;
+bool SKIP_FULL_RES_GRIDFIT = false;
 std::string tag = "DL_full";
 // set these parameters at the very start
 
@@ -111,7 +112,7 @@ const int dm2_grdpts(100), ue4_grdpts(50), umu4_grdpts(50); // profile with dm2 
 // const int dm2_grdpts(1), ue4_grdpts(25), umu4_grdpts(25); // profile with dm2 fixed
 // //const int dm2_grdpts(25), ue4_grdpts(1), umu4_grdpts(25); // profile with Ue4 fixed
 
-const float dm2_maya[101] = {0.0101158, 0.0110917, 0.0121619, 0.0133352, 0.0146218, 0.0160324, 0.0175792, 0.0192752, 0.0211349, 0.0231739, 0.0254097, 0.0278612, 0.0305492, 0.0334965, 0.0367282, 0.0402716, 0.044157, 0.0484172, 0.0530884, 0.0582102, 0.0638262, 0.0699841, 0.076736, 0.0841393, 0.0922569, 0.101158, 0.110917, 0.121618, 0.133352, 0.146217, 0.160324, 0.175792, 0.192752, 0.211348, 0.231739, 0.254096, 0.278611, 0.305491, 0.334964, 0.367281, 0.402716, 0.441569, 0.484171, 0.530882, 0.582101, 0.638261, 0.699839, 0.767358, 0.841392, 0.922567, 1.01158, 1.10917, 1.21618, 1.33352, 1.46217, 1.60324, 1.75791, 1.92752, 2.11348, 2.31738, 2.54096, 2.78611, 3.0549, 3.34964, 3.6728, 4.02715, 4.41568, 4.8417, 5.30881, 5.821, 6.3826, 6.99838, 7.67357, 8.4139, 9.22565, 10.1157, 11.0917, 12.1618, 13.3351, 14.6217, 16.0323, 17.5791, 19.2751, 21.1347, 23.1738, 25.4095, 27.861, 30.549, 33.4963, 36.7279, 40.2714, 44.1567, 48.4168, 53.088, 58.2098, 63.8258, 69.9836, 76.7355, 84.1388, 92.2563, 112.202};
+// const float dm2_maya[101] = {0.0101158, 0.0110917, 0.0121619, 0.0133352, 0.0146218, 0.0160324, 0.0175792, 0.0192752, 0.0211349, 0.0231739, 0.0254097, 0.0278612, 0.0305492, 0.0334965, 0.0367282, 0.0402716, 0.044157, 0.0484172, 0.0530884, 0.0582102, 0.0638262, 0.0699841, 0.076736, 0.0841393, 0.0922569, 0.101158, 0.110917, 0.121618, 0.133352, 0.146217, 0.160324, 0.175792, 0.192752, 0.211348, 0.231739, 0.254096, 0.278611, 0.305491, 0.334964, 0.367281, 0.402716, 0.441569, 0.484171, 0.530882, 0.582101, 0.638261, 0.699839, 0.767358, 0.841392, 0.922567, 1.01158, 1.10917, 1.21618, 1.33352, 1.46217, 1.60324, 1.75791, 1.92752, 2.11348, 2.31738, 2.54096, 2.78611, 3.0549, 3.34964, 3.6728, 4.02715, 4.41568, 4.8417, 5.30881, 5.821, 6.3826, 6.99838, 7.67357, 8.4139, 9.22565, 10.1157, 11.0917, 12.1618, 13.3351, 14.6217, 16.0323, 17.5791, 19.2751, 21.1347, 23.1738, 25.4095, 27.861, 30.549, 33.4963, 36.7279, 40.2714, 44.1567, 48.4168, 53.088, 58.2098, 63.8258, 69.9836, 76.7355, 84.1388, 92.2563, 112.202};
 
 const int nBins_e(12),nBins_mu(19);
 const int nBins = nBins_e+nBins_mu;
@@ -152,6 +153,14 @@ int main(int argc, char* argv[]){
 
   GridDefinition griddef;
   griddef.define_maya_grid();
+  int mi_stride   = 20; //  5 pts
+  int uei_stride  = 10; //  5 pts
+  int umui_stride = 10; //  5 pts  
+
+  // griddef.define_proper_bounds_course();
+  // int mi_stride   = 5; //  5 pts
+  // int uei_stride  = 2; //  5 pts
+  // int umui_stride = 2; //  5 pts  
   
   // open output text files
   coordfile.open("bins_data.txt", std::ios_base::app);
@@ -161,7 +170,7 @@ int main(int argc, char* argv[]){
   if(printbins) printbinedges( griddef );
 
   // stop after printing bin edges
-  if (true) {
+  if (false) {
     coordfile.close();    
     return 0;
   }
@@ -188,7 +197,7 @@ int main(int argc, char* argv[]){
     std::cout << std::endl;
     std::cout << "--------------------------------------------------------------------" << std::endl;    
   }
-  else {
+  else if (pseudo_exp_idnum>=0) {
     data_v = get_pseudo_experiment_data( pseudo_exp_idnum, pseudo_experiment_file, file_oscpar_v );
     std::cout << "--------------------------------------------------------------------" << std::endl;
     std::cout << "PSEUDO-EXPERIMENT DATA[ ID=" << pseudo_exp_idnum << " ]" << std::endl;
@@ -196,6 +205,13 @@ int main(int argc, char* argv[]){
       std::cout << bindata << " ";
     std::cout << std::endl;
     std::cout << "--------------------------------------------------------------------" << std::endl;
+  }
+  else if (pseudo_exp_idnum==-2) {
+    std::cout << "--------------------------------------------------------------------" << std::endl;
+    std::cout << "SET DATA TO CENTRAL VALUE EXPECTATION (AZIMOV)=" << pseudo_exp_idnum << " ]" << std::endl;
+    data_v.resize( nBins, 0.0 );
+    for (int i=0; i<nBins; i++)
+      data_v[i] = cvSpec.collapsed_vector[i];
   }
 
   // set data to NULL expectation, for sensitivity curves
@@ -215,10 +231,18 @@ int main(int argc, char* argv[]){
   TMatrixD * cvFracSys_collapsed =(TMatrixD*)fsys->Get("frac_covariance");
   int a = cvChi.FillCollapsedFractionalMatrix(cvFracSys_collapsed);
 
+  // calculate chi2 of CV
+  cvChi.ReloadCoreSpectrum(&cvSpec);
+  cov_cv = GetTotalCov(data_v, cvSpec, *cvFracSys_collapsed);
+  // arguments: obs,exp,cov
+  std::vector<float> nll_components_cv;
+  float llh_cv = GetLLHFromVector(data_v, cvSpec, cov_cv, nll_components_cv, false);
+  chifile << llh_cv << " " << nll_components_cv[0] << " " << nll_components_cv[1] << std::endl;
+
   // initialize the minimizer
   // we'll use it to find the best fit and also to generate spectra at different points on the grid
   SBNllminimizer minimizer( xml );
-  minimizer.use_polar_coords = true;
+  minimizer.use_polar_coords = false;
   std::cout<<"Initialized minimizer"<<std::endl;
   std::cout<<"USE POLAR COORDS FOR FIT: "<<minimizer.use_polar_coords<<std::endl;
 
@@ -283,9 +307,6 @@ int main(int argc, char* argv[]){
   float um_min = 0;
   float m_min = 0;
   float grid_min = 99999;
-  int mi_stride = 1;
-  int uei_stride = 1;
-  int umui_stride = 1;
   int max_results = int(0.01*dm2_grdpts*ue4_grdpts*umu4_grdpts);
   //int max_results = 10;
   if (max_results<10 )
@@ -294,25 +315,32 @@ int main(int argc, char* argv[]){
   int num_sorts = 0;
   std::vector< grid_result_t > result_list_v; /// container to put in results
 
-  if (!DO_FULL_GRID_CHI2_CALC ) {
-    mi_stride = 10;
-    uei_stride = 10;
-    umui_stride = 10;
-  }
-
   auto start_gridscan = high_resolution_clock::now();
   
   if ( DO_GRID_CHI2_CALC ) {
     
     result_list_v.reserve( max_results );
     
-    for(int mi_base = 0; mi_base < dm2_grdpts; mi_base += mi_stride ){
-      for(int uei_base = 0; uei_base < ue4_grdpts; uei_base += uei_stride ){
-	for(int umui_base = 0; umui_base < umu4_grdpts; umui_base += umui_stride ) {
+    for(int mi_base = 0; mi_base < griddef.dm2_grdpts; mi_base += 1 ) {
+      for(int uei_base = 0; uei_base < griddef.ue4_grdpts; uei_base += 1 ) {
+	for(int umui_base = 0; umui_base < griddef.umu4_grdpts; umui_base += 1 ) {
+
+
+	  if ( SKIP_FULL_RES_GRIDFIT ) {
+	    // we don't evaluate the NLL all of the grid, only the grid points used for the data optimizer
+	    if ( mi_base%mi_stride==0 && uei_base%uei_stride==0 && umui_base%umui_stride==0 )
+	      {} // ok, perform the fit
+	    else
+	      continue; // skip the fit for this point on the grid
+	  }
+	      
+	  
 	  std::cout<<idx<<std::endl;
 
-	  float ue_base = pow(10.,(uei_base/float(ue4_grdpts)*TMath::Log10(ue4_hibound/ue4_lowbound) + TMath::Log10(ue4_lowbound)));
-	  float um_base = pow(10.,(umui_base/float(umu4_grdpts)*TMath::Log10(umu4_hibound/umu4_lowbound) + TMath::Log10(umu4_lowbound)));
+	  // float ue_base = pow(10.,(uei_base/float(ue4_grdpts)*TMath::Log10(ue4_hibound/ue4_lowbound) + TMath::Log10(ue4_lowbound)));
+	  // float um_base = pow(10.,(umui_base/float(umu4_grdpts)*TMath::Log10(umu4_hibound/umu4_lowbound) + TMath::Log10(umu4_lowbound)));
+	  // Using Maya's fine resolution grid
+	  //float mnu_base = sqrt( dm2_maya[mi_base] );
 
 	  // Previous Katie Scan
 	  //float mnu_base = ((mi_base)/float(dm2_grdpts)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) + TMath::Log10(sqrt(dm2_lowbound)));	  
@@ -322,9 +350,10 @@ int main(int argc, char* argv[]){
 	  // }
 	  // mnu_base = pow(10.,mnu_base);
 
-	  // Using Maya's fine resolution grid
-	  float mnu_base = sqrt( dm2_maya[mi_base] );
-	
+	  float mnu_base = sqrt( griddef.dm2_bin_v[ mi_base ] );	  
+	  float ue_base  = griddef.Ue4_bin_v[ uei_base ];
+	  float um_base  = griddef.Umu4_bin_v[ umui_base ];
+
 	  // calculate scaling factors
 	  float e_app = 4*pow(ue_base,2)*pow(um_base,2);
 	  float e_dis = 4*pow(ue_base,2)*(1-pow(ue_base,2));
@@ -343,7 +372,8 @@ int main(int argc, char* argv[]){
 	  // arguments: obs,exp,cov
 	  cov_osc= GetTotalCov(data_v, oscSpec, *oscFracSys_collapsed);
 	  // arguments: obs,exp,cov
-	  float llh_osc = GetLLHFromVector(data_v, oscSpec, cov_osc,false);
+	  std::vector<float> nll_components;
+	  float llh_osc = GetLLHFromVector(data_v, oscSpec, cov_osc,nll_components,false);
 	  if(llh_osc<grid_min){
 	    grid_min = llh_osc;
 	    ue_min = ue_base;
@@ -356,27 +386,35 @@ int main(int argc, char* argv[]){
 		     << ue_base << " " << um_base << " " << mnu_base*mnu_base << " "
 		     << llh_osc << std::endl;
 
-	  if ( result_list_v.size() < max_results ) {
-	    // result vector not full
-	    result_list_v.push_back( grid_result_t( llh_osc, mi_base, uei_base, umui_base ) );
-	    if ( result_list_v.size()==max_results ) {
-	      std::sort( result_list_v.begin(), result_list_v.end() );
-	      num_sorts++;
-	    }
-	  }
-	  else {
-	    // result vector at capacity
-	    if ( result_list_v.back().llh > llh_osc ) {
-	      // add this and sort
-	      result_list_v.pop_back(); // remove bad element
+	  // we only use some of the grid points in the "fit procedure"
+	  bool is_on_gridscan_subgrid = false;
+	  if ( mi_base%mi_stride==0 && uei_base%uei_stride==0 && umui_base%umui_stride==0 )
+	    is_on_gridscan_subgrid = true;
+
+	  if ( is_on_gridscan_subgrid ) {
+	    // on the subgrid, so register grid_result_t into result_list_v
+	    if ( result_list_v.size() < max_results ) {
+	      // result vector not full
 	      result_list_v.push_back( grid_result_t( llh_osc, mi_base, uei_base, umui_base ) );
-	      std::sort( result_list_v.begin(), result_list_v.end() );
-	      num_sorts++;
+	      if ( result_list_v.size()==max_results ) {
+		std::sort( result_list_v.begin(), result_list_v.end() );
+		num_sorts++;
+	      }
+	    }
+	    else {
+	      // result vector at capacity
+	      if ( result_list_v.back().llh > llh_osc ) {
+		// add this and sort
+		result_list_v.pop_back(); // remove bad element
+		result_list_v.push_back( grid_result_t( llh_osc, mi_base, uei_base, umui_base ) );
+		std::sort( result_list_v.begin(), result_list_v.end() );
+		num_sorts++;
+	      }
 	    }
 	  }
 	  
-	  chifile<<llh_osc<<std::endl;
-	  idx += umui_stride;
+	  chifile<<llh_osc<< " " << nll_components[0] << " " << nll_components[1] << std::endl;
+	  idx++;
 	}// end of loop over base umu
       }//end of loop over base ue
     }//end of loop over base mass
@@ -458,17 +496,26 @@ int main(int argc, char* argv[]){
       if ( iiresult>=result_list_v.size() )
 	break;
 
+      auto const& result = result_list_v.at(iiresult);      
+
       // int startval = 5*x;
       // int numgridpts=25;
       // float ue_val = pow(10.,(startval/float(numgridpts)*TMath::Log10(ue4_hibound/ue4_lowbound) + TMath::Log10(ue4_lowbound)));
       // float um_val = pow(10.,(startval/float(numgridpts)*TMath::Log10(umu4_hibound/umu4_lowbound) + TMath::Log10(umu4_lowbound)));
       // float mnu_val = pow(10.,((startval/float(numgridpts))+.5)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) + TMath::Log10(sqrt(dm2_lowbound)) );
-      int uei_base = result_list_v.at(iiresult).uei;
-      int umui_base = result_list_v.at(iiresult).umui;
       
-      float ue_base = pow(10.,(uei_base/float(ue4_grdpts)*TMath::Log10(ue4_hibound/ue4_lowbound) + TMath::Log10(ue4_lowbound)));
-      float um_base = pow(10.,(umui_base/float(umu4_grdpts)*TMath::Log10(umu4_hibound/umu4_lowbound) + TMath::Log10(umu4_lowbound)));
-      float mnu_base = sqrt( dm2_maya[ result_list_v.at(iiresult).mi ] );
+      // int uei_base = result_list_v.at(iiresult).uei;
+      // int umui_base = result_list_v.at(iiresult).umui;      
+      // float ue_base = pow(10.,(uei_base/float(ue4_grdpts)*TMath::Log10(ue4_hibound/ue4_lowbound) + TMath::Log10(ue4_lowbound)));
+      // float um_base = pow(10.,(umui_base/float(umu4_grdpts)*TMath::Log10(umu4_hibound/umu4_lowbound) + TMath::Log10(umu4_lowbound)));
+      // float mnu_base = sqrt( dm2_maya[ result_list_v.at(iiresult).mi ] );
+
+      int uei_base  = result.uei;
+      int umui_base = result.umui;
+
+      float mnu_base = sqrt( griddef.dm2_bin_v[ result.mi ] );
+      float ue_base  = griddef.Ue4_bin_v[uei_base];
+      float um_base  = griddef.Umu4_bin_v[umui_base];
 	  
       temp = minimizer.doFit( data_v, mnu_base, ue_base , um_base );
       if (temp[0] < min_minimizer){
@@ -523,8 +570,20 @@ int main(int argc, char* argv[]){
   else  {
     beststart = final_result;
   }
+
+  // Recalc final chi2
+  double final_bestfit_par[3] = { log(beststart[1]), beststart[2], beststart[3] };
+  double final_chi2 = SBNllminimizer::negative_likelihood_ratio( final_bestfit_par );
+
+  if ( fabs(beststart[0]-final_chi2)>1e-5 ) {
+    std::cout << "FINAL CHI2 and BEST CHI2 DISAGREES!" << std::endl;
+    std::cout << "  beststart chi2 = " << beststart[0] << std::endl;
+    std::cout << "  final chi2 = " << final_chi2 << std::endl;
+  }
   
-  chifile<<beststart[0]<<" "<<beststart[1]<<" "<<beststart[2]<<" "<<beststart[3]<<std::endl;
+  chifile<<beststart[0]<<" "<<beststart[1]<<" "<<beststart[2]<<" "<<beststart[3] << " "
+	 << SBNllminimizer::llh_components_v[1] << " " << SBNllminimizer::llh_components_v[2]
+	 << std::endl;
   
   // float ue4_val = 0;
   // float umu4_val = .21;
@@ -551,7 +610,7 @@ int main(int argc, char* argv[]){
 
 void printbinedges( const GridDefinition& griddef ){
   // funtion that prints the bins  to the output textfile
-  for(int mi = 0; mi < dm2_grdpts; mi++){
+  for(int mi = 0; mi < griddef.dm2_grdpts; mi++){
     //mnu = pow(10.,((mi+.5)/float(dm2_grdpts)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) + TMath::Log10(sqrt(dm2_lowbound))));
     //mnu = pow(10.,((mi+.5)/float(dm2_grdpts)*TMath::Log10(sqrt(dm2_hibound)/sqrt(dm2_lowbound)) ));
     
@@ -562,14 +621,14 @@ void printbinedges( const GridDefinition& griddef ){
   }
   coordfile << std::endl;
   
-  for(int uei = 0; uei < ue4_grdpts; uei++){
+  for(int uei = 0; uei < griddef.ue4_grdpts; uei++){
     //ue = pow(10.,(uei/float(ue4_grdpts)*TMath::Log10(ue4_hibound/ue4_lowbound) + TMath::Log10(ue4_lowbound)));
     ue = griddef.Ue4_bin_v.at(uei);
     coordfile << ue << " ";
   }
   coordfile << std::endl;
   
-  for(int umui = 0; umui < umu4_grdpts; umui++){
+  for(int umui = 0; umui < griddef.umu4_grdpts; umui++){
     //umu = pow(10.,(umui/float(umu4_grdpts)*TMath::Log10(umu4_hibound/umu4_lowbound) + TMath::Log10(umu4_lowbound)));
     umu = griddef.Umu4_bin_v.at(umui);
     coordfile << umu << " ";
@@ -630,13 +689,18 @@ TMatrixD GetTotalCov(const std::vector<float>& obsSpec, const SBNspec& expSpec, 
   return fullcov;
 }//end of GetTotalCov
 
-float GetLLHFromVector(const std::vector<float>& obsSpec,const SBNspec& expSpec,const TMatrixD& Msys, bool prints){
+float GetLLHFromVector(const std::vector<float>& obsSpec,const SBNspec& expSpec,const TMatrixD& Msys,
+		       std::vector<float>& lln_components, bool prints){
 	// // function to calculate a chi2 (shape + rate)
 	// // inputs:
 	// // obsSpec: "data" vector
 	// // predSpec: "MC" spectra
 	// // Mfracsys: total (flux+xsec+detvar) covariance matrix
+  // returns total negative LL
+  // also passes back through lln_components the chi2 term and the determinant term.
 	float chisqTest;
+	lln_components.clear();
+	lln_components.resize(2,0);
 
 	// inv cov for chi2calc
 	TMatrixD invcov = Msys;
@@ -645,16 +709,19 @@ float GetLLHFromVector(const std::vector<float>& obsSpec,const SBNspec& expSpec,
 	// add the chi2-like part
 	chisqTest = 0;
 	for(int i = 0; i < nBins; i++){
-		for(int j = 0; j < nBins; j++){
-			// (obsi-predi)*(invcov)*(obsj-predj)
-			if(i==j && prints) std::cout<<i<<" "<<obsSpec[i]<<" "<<expSpec.collapsed_vector[i]<<" "<<Msys[i][j]<<" "<<((obsSpec[i] - expSpec.collapsed_vector[i])*invcov[i][j]*(obsSpec[j] - expSpec.collapsed_vector[j]))<<std::endl;
-			chisqTest += (obsSpec[i] - expSpec.collapsed_vector[i])*invcov[i][j]*(obsSpec[j] - expSpec.collapsed_vector[j]);
-		}
+	  for(int j = 0; j < nBins; j++){
+	    // (obsi-predi)*(invcov)*(obsj-predj)
+	    if(i==j && prints) std::cout<<i<<" "<<obsSpec[i]<<" "<<expSpec.collapsed_vector[i]<<" "<<Msys[i][j]<<" "<<((obsSpec[i] - expSpec.collapsed_vector[i])*invcov[i][j]*(obsSpec[j] - expSpec.collapsed_vector[j]))<<std::endl;
+	    chisqTest += (obsSpec[i] - expSpec.collapsed_vector[i])*invcov[i][j]*(obsSpec[j] - expSpec.collapsed_vector[j]);
+	  }
 	}
+	lln_components[0] = chisqTest;
 	// now need ln(det(2Pi*M))
 	// TMatrixD tempcov = 2*3.14159265358979323846*Msys;
 	// std::cout<<"chi2: "<<chisqTest<<" det: "<<log(Msys.Determinant())<<std::endl;
-	chisqTest += log(Msys.Determinant());
+	float ln_msys_det = log(Msys.Determinant());
+	lln_components[1] = ln_msys_det;
+	chisqTest += ln_msys_det;
 
   // if (chisqTest<207){
   //   std::cout<<"chi2: "<<chisqTest-log(Msys.Determinant())<<" det: "<<log(Msys.Determinant())<<std::endl;
@@ -665,7 +732,7 @@ float GetLLHFromVector(const std::vector<float>& obsSpec,const SBNspec& expSpec,
   //   std::cout<<std::endl;
   //   assert (1==2);
   // }
-
+	
 	return chisqTest;
 }//end of GetLLHFromSpectra
 
@@ -714,7 +781,8 @@ void testfcn(Int_t &npar, Double_t *gin, Double_t &f, Double_t *par, Int_t iflag
 	int b = tmpChi.FillCollapsedFractionalMatrix(tmpFracSys_collapsed);
 	TMatrixD tmpcov = GetTotalCov(data_v, newSpec, *tmpFracSys_collapsed);
 	// calculate -2LLH
-	f =  GetLLHFromVector(data_v, newSpec, tmpcov, false);
+	std::vector<float> temp_lln_components;
+	f =  GetLLHFromVector(data_v, newSpec, tmpcov, temp_lln_components, false);
 	delete tmpFracSys_collapsed;
 } // end of fcn function
 
